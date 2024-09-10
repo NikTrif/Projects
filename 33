@@ -47,7 +47,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
-1 Загрузка данных (загрузка необходимых данных , первичный осмотр)
+1 Загрузка данных *(загрузка необходимых данных , первичный осмотр)
 
 data_df = pd.read_csv('https://code.s3.yandex.net/datasets/mobile_dataset.csv')
 source_df = pd.read_csv('https://code.s3.yandex.net/datasets/mobile_sources.csv')
@@ -67,7 +67,10 @@ display(source_df.info())
       В source_df поменять название колонки userId на user_id.
 
 
-2  Предобработка данных
+2  Предобработка данных *(посмотрим типы данных , изменим , если нелобходимо
+                         проверим пропуски и обработаем если необходимо
+                         проверим дубликаты)
+ 
   Поменяем тип данных и названия
 
   уберём милисекунды из event.time
@@ -116,8 +119,16 @@ display(data.query('event_name == "map"')['user_id'].nunique())
 display(data2.query('event_name == "map"')['user_id'].nunique())
 display(data3.query('event_name == "map"')['user_id'].nunique())
 
-3  Исследовательский анализ данных
-  Рассмотрим данные и немного исследуем их
+3  Исследовательский анализ данных *(необходимо найти повторяющиеся сценарии дейтсвий пользователей , 
+                                    сгруппируем по сессиям,
+                                    избавимся от повторяющихся событий в рамках сессии и 
+                                    определим общую популярность сценариев,
+                                    рассмотрим связь целевого события — просмотра контактов — и других действий пользователей,
+                                    посмотрим какой самый частый сценарий у людей которые просматривают контакты,
+                                    построим воронку сценариев по уникальным пользователям ,
+                                    посмотрим конверсию переходов)
+  
+    Рассмотрим данные и немного исследуем их
 
 3.1  Посчитаем долю из каждого источника установки
 global_sc = data.groupby('source').agg({'user_id' : 'nunique'})
@@ -443,6 +454,7 @@ plt.ylabel('частота')
 ​
 plt.title('Активные пользователи в день', fontsize=15)
 plt.show()
+    
     частота активных пользователей примерно одинакова 
     среднее значение -280 
     стандартное отклонение небольшое - 46.737
@@ -501,7 +513,9 @@ both_frames
 
 4  Проверка гипотез
 
-4.1  гипотеза 1
+4.1  гипотеза 1 *( Одни пользователи совершают действия tips_show и tips_click , другие —
+                  только tips_show . Проверьте гипотезу: конверсия в просмотры контактов
+                  различается у этих двух групп.)
 
 Проверим гипотезу
 
@@ -526,3 +540,216 @@ print('tips_show+tips_click count', len(tips_show_click))
 only_tips = list(set(tips_show) - set(tips_show_click))
 print('only_tips ', len(only_tips))
 data['event_name'].unique()
+
+data['user_id'].nunique()
+
+    4293 - all 
+​    2801 - tips_show
+​    297 - tips_show + tips_click
+
+list_10 = ['4293', '2801', '297']
+all_users = 4293
+tips_show_only = 2801
+tips_show_and_tips_click = 297
+​
+df = pd.DataFrame(list_10)
+​
+df1 = df
+df1 = df1.reset_index()
+df3 = {'users : [4293]', 'users2 : [4293]','users3 : [42923]'}
+row_labels = ['all_users', 'tips_only', 'tips_and_click']
+
+show_click_events = data.query('user_id==@tips_show_click')[['user_id', 'event_name']]
+print('кол-во tips_show + click', show_click_events[show_click_events['event_name']=="contacts_show"]['user_id'].nunique())
+
+only_show_events = data.query('user_id==@only_tips')[['user_id', 'event_name']]
+print('кол-во tips_show', only_show_events[only_show_events['event_name']=="contacts_show"]['user_id'].nunique())
+
+
+    отфильтруем и заполним events
+    tips_show count 2504
+    tips_show+tips_click count 297
+    tips_show_into_cs + click 91 
+    tips_show+tips_click__into_cs 425
+
+tips_cs_show_perc = round((91 / 297) * 100, 2)
+tips_cs_show_perc
+
+tips_show_click_cs_show_perc = round((425/2504) * 100, 2)
+tips_show_click_cs_show_perc
+
+user_group_1 = only_show_events[only_show_events['event_name']=="contacts_show"]['user_id'].nunique()
+user_group_2 = show_click_events[show_click_events['event_name']=="contacts_show"]['user_id'].nunique()
+
+events_group_1 = len(only_tips)
+events_group_2 = len(tips_show_click)
+
+    будем проверять гипотезу о равенстве долей двух генеральных совокупностей по выборкам из них 
+
+def stat_test(success, not_success, alpha):  
+    alpha = alpha
+    success = success
+    not_success = not_success
+    p1 = success[0]/not_success[0]
+    p2 = success[1]/not_success[1]
+    
+    p_combined = (success[0] + success[1]) / (not_success[0] + not_success[1])
+
+    difference = p1 - p2
+
+    z_value = difference / mth.sqrt(p_combined * (1 - p_combined) * (1/not_success[0] + 1/not_success[1]))
+    distr = st.norm(0, 1) 
+    z_value = difference / mth.sqrt(
+        p_combined * (1 - p_combined) * (1 / not_success[0] + 1 / not_success[1]))
+
+    distr = st.norm(0, 1)
+    p_value = (1 - distr.cdf(abs(z_value))) * 2
+
+    print('p-значение: ', p_value)
+
+    if p_value < alpha:
+        print('Отвергаем нулевую гипотезу: между долями есть значимая разница')
+    else:
+        print(
+            'Не получилось отвергнуть нулевую гипотезу: между долями есть значимая разница'
+        ) 
+
+
+    Возьмём alpha = .05 - критический уровень статистической значимости
+
+alpha = .05
+success = [user_group_1, user_group_2]
+not_success = [events_group_1, events_group_2]
+stat_test(success, not_success, alpha) 
+
+print(success, not_success, alpha)
+
+    Нулевая гипотеза не подтвердилась , между группами есть разница , скорей всего tips_click ведёт к увеличению конверсии
+
+4.2  гипотеза 2
+
+    будем проверять гипотезу о равенстве долей двух генеральных совокупностей по выборкам из них
+
+    проверим гипотезу:у yandex конверсия больше чем у google 
+
+H0: у yandex конверсия меньше или равна google
+H1: у yandex конверсия больше google
+
+    подготовим данные
+
+author = ['all_goole_users', 'success_google_users']
+article = [1129, 275]
+auth_series = pd.Series(author)
+article_series = pd.Series(article)
+frame = {'event_users': auth_series,
+         'count': article_series}
+result2 = pd.DataFrame(frame)
+result2
+
+plt.figure(figsize=(10,5))
+ax=sns.barplot(x=result2['event_users'],y=result2['count'],data = result2, color='steelblue')
+
+    
+#добавим числа для понимания
+for p in ax.patches:
+    ax.annotate(format(p.get_height(), '.1f'),
+                   (p.get_x() + p.get_width() / 2., p.get_height()),
+                   ha = 'center', va = 'center',
+                   xytext = (0, 9),
+                   textcoords = 'offset points')
+ax.set_xlabel('типы пользователей')
+ax.set_ylabel('Число пользователей')
+plt.title('Группы пользователей источник google')
+plt.show()
+
+google_df = data.query('source == "google"')
+yandex_df = data.query('source == "yandex"')
+
+yandex_users = yandex_df.user_id.nunique()
+google_users = google_df.user_id.nunique()
+
+success_yandex = yandex_df.query('event_name=="contacts_show" & source == "yandex"').user_id.nunique()
+success_google = google_df.query('event_name=="contacts_show"').user_id.nunique()
+
+conversion_yandex = success_yandex / yandex_users
+conversion_google = success_google / google_users
+
+success_yandex
+yandex_users
+    
+    Возьмём alpha = .05 - критический уровень статистической значимости
+
+aplha = .05
+
+
+success = np.array([success_google, success_yandex])
+not_success = np.array([google_users , yandex_users]) 
+
+p1 = success[0]/not_success[0]
+p2 = success[1]/not_success[1]
+
+p_combined = (success[0] + success[1]) / (not_success[0] + not_success[1])
+difference = p1 - p2 
+z_value = difference / mth.sqrt(p_combined * (1 - p_combined) * (1/not_success[0] + 1/not_success[1]))
+distr = st.norm(0, 1)  
+
+z_value = difference / mth.sqrt(p_combined * (1 - p_combined) * (1/not_success[0] + 1/not_success[1]))
+distr = st.norm(0, 1) 
+
+p_value = (1 - distr.cdf(abs(z_value))) * 2
+print(f'p_values = {p_value}')
+
+if (p_value < alpha):
+    print("Отвергаем нулевую гипотезу:у yandex конверсия меньше или равна google")
+else:
+    print("Не получилось отвергнуть нулевую гипотезу,у yandex конверсия меньше или равна google") 
+print(f'конверсия yandex: {conversion_yandex:.2%}')
+print(f'конверсия  google: {conversion_google:.2%}')  
+
+    Не получилось отвергнуть гипотезу "у yandex конверсия меньше или равна google"
+
+4.3  Выводы
+
+Следующие шаги были реализованы:
+
+-Загрузили данные , провели общий осмотр.
+-Изменили тип данных в одной колонке , убрали милисекунды, поменяли названия колонок.
+-Проверили наличие дубликатов и пропусков , убрали дубликаты.
+-Совместили два датафрейма в один и удостоверились что нет пропусков и дубликатов в ней нет
+-Посчитали долю из каждого источника установки , посмотрели график(1-yandex, 2-other,3-google)
+-Посчитали частоту действий пользователей , посмотрели график (1-tips_show,2-photo_show,3-search)
+-Рассмотрели коэффицент удержания клиентов,начале примерно 21% , так же выяснили что чем дольше пользователть проводит 
+    времени в приложении , тем меньше люди остаются.
+-Рассмотрели DAU(Daily Active Users) , частота примерно одинаковая , в среднем 280 человек в день активны , 
+    в особые периоды максимальное значение доходит до 352
+-Составили сценарии действий пользователей и выяснили , что в ЦС больше всего переходов после map(просмотр карты) - 147 , 
+    потом search(поиск)-99 и photo_show(просмотр фото)-77
+-изучили относительную частоту событий и выяснили что фото(15.69% > 12.63%) больше просматривают пользователи без ЦС , 
+    а вот поиск(10.08% > 9.38%) и открытие карточек(9.81% > 7.14%) больше у людей с ЦС. звонки идут только от людей без ЦС
+-Рассмотрели гипотезу "Одни пользователи совершают действия tips_show и tips_click , другие —
+    только tips_show . Проверили гипотезу: конверсия в просмотры контактов
+    различается у этих двух групп." , поняли , что между этими группами есть разница.
+-Рассмотрели гипотезу "Пользователи которые пришли с источника Yandex (source) имеют лучшую конверсию в просмотры контактов ,
+    чем пользователи пришедшие с Google." 
+    Выяснили , что у двух площадок очень близкая конверсия в просмотры (24.72% - yandex , 24.36% - google).
+
+
+    -показ рекламы ожидаемо находиться на 1 месте в обоих группах (57.24% , 58.52%) и составляет более половины событий
+    -показ фото больше у пользователей без ЦС (15.69% против 12.63%)
+    -поиск у пользователей с ЦС немного больше (10.08% против 9.38%)
+    -открытие карточек у пользоватейлей с ЦС больше ( 9.81% против 7.14%) 
+    -звонки есть только у пользователей без ЦС - их доля от общего всего 2.41
+    -люди с ЦС чаще добавляют в избранное (2.13% против 1.90%)
+    -клики по рекламным объявлениям самые низкие в обеих группах(1.50% пользователи без ЦС и 1.03% у пользователей с ЦС) 
+
+
+Общие рекомендации:
+
+-yandex является самым успешным источником установки приложений , а у google позиции хуже , 
+    хотя ползьватели показывают похожую конверсию , можно увеличить бюджет на привлечение через google
+-просмотр контактов очень важен , его увеличение ведёт к росту показателей: поиск , 
+    открытие карточек и добавления в избранное. стоит больше предлагать людям разнообразных товаров , рости "вширь" и 
+    брать кол-вом 
+-подумать над способами удержания старых пользователей-например,разработать премиум - подписку, 
+    которое будет повышать в рейтинге размещенные пользователями объявления
+-работать над метриками , улучшающими ЦС - map , search , photo_show лучше всего улучшают ЦС
