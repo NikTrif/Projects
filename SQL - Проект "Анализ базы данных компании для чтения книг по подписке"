@@ -1,0 +1,274 @@
+1  Описание проекта
+  Коронавирус застал мир врасплох, изменив привычный порядок вещей. На какое-то время жители городов перестали выходить на улицу, посещать кафе и торговые центры. 
+  Зато стало больше времени для книг. Это заметили стартаперы — и бросились создавать приложения для тех, кто любит читать.
+  Ваша компания решила быть на волне и купила крупный сервис для чтения книг по подписке. Ваша первая задача как аналитика — проанализировать базу данных.
+  В ней — информация о книгах, издательствах, авторах, а также пользовательские обзоры книг. Эти данные помогут сформулировать ценностное предложение для нового продукта.
+  
+2  Описание данных
+  
+  Таблица books
+  Содержит данные о книгах:
+  book_id — идентификатор книги;
+  author_id — идентификатор автора;
+  title — название книги;
+  num_pages — количество страниц;
+  publication_date — дата публикации книги;
+  publisher_id — идентификатор издателя.
+  
+  Таблица authors
+  Содержит данные об авторах:
+  author_id — идентификатор автора;
+  author — имя автора.
+  
+  Таблица publishers
+  Содержит данные об издательствах:
+  publisher_id — идентификатор издательства;
+  publisher — название издательства;
+  
+  Таблица ratings
+  Содержит данные о пользовательских оценках книг:
+  rating_id — идентификатор оценки;
+  book_id — идентификатор книги;
+  username — имя пользователя, оставившего оценку;
+  rating — оценка книги.
+  
+  Таблица reviews
+  Содержит данные о пользовательских обзорах:
+  review_id — идентификатор обзора;
+  book_id — идентификатор книги;
+  username — имя автора обзора;
+  text — текст обзора.
+
+3  Задания
+-Посчитайте, сколько книг вышло после 1 января 2000 года;
+-Для каждой книги посчитайте количество обзоров и среднюю оценку;
+-Определите издательство, которое выпустило наибольшее число книг толще 50 страниц — так вы исключите из анализа брошюры;
+-Определите автора с самой высокой средней оценкой книг — учитывайте только книги с 50 и более оценками;
+-Посчитайте среднее количество обзоров от пользователей, которые поставили больше 48 оценок.
+
+
+import pandas as pd
+import sqlalchemy as sa
+
+db_config = {
+'user': 'praktikum_student', # имя пользователя
+'pwd': 'Sdf4$2;d-d30pp', # пароль
+'host': 'rc1b-wcoijxj3yxfsf3fs.mdb.yandexcloud.net',
+'port': 6432, # порт подключения
+'db': 'data-analyst-final-project-db' # название базы данных
+}
+
+connection_string = 'postgresql://{user}:{pwd}@{host}:{port}/{db}'.format(**db_config)
+
+  # сохраняем коннектор
+engine = sa.create_engine(connection_string, connect_args={'sslmode':'require'})
+
+  # чтобы выполнить SQL-запрос, пишем функцию с использованием Pandas
+def get_sql_data(query:str, engine:sa.engine.base.Engine=engine) -> pd.DataFrame:
+    with engine.connect() as con:
+       return pd.read_sql(sql=sa.text(query), con = con)
+
+3.1  Опишите цели исследования
+  
+  Сформулировать целостное предложение для нового продукта - приложения , которое позволит пользователям читать книги по подписке.
+
+3.2  Исследуйте таблицы — выведите первые строки
+
+3.3  Таблица books
+books = ''' SELECT *
+            FROM books
+            Limit 5
+        '''
+get_sql_data(books)
+
+  данные соответствуют заявленной структуре и описанию(книги)
+
+3.4  Таблица authors
+authors = ''' SELECT *
+            FROM authors
+            Limit 5
+        '''
+get_sql_data(authors)
+
+  данные соответствуют заявленной структуре и описанию (авторы)
+
+3.5  Таблица ratings
+ratings = ''' SELECT *
+            FROM ratings
+            Limit 5
+        '''
+get_sql_data(ratings)
+
+  данные соответствуют заявленной структуре и описанию (рейтинги)
+
+3.6  Таблица reviews
+reviews = ''' SELECT *
+            FROM reviews
+            Limit 5
+        '''
+get_sql_data(reviews)
+  
+  данные соответствуют заявленной структуре и описанию (обзоры)
+
+3.7  Таблица publishers
+publishers = ''' SELECT *
+            FROM publishers
+            Limit 5
+        '''
+get_sql_data(publishers)
+
+  данные соответствуют заявленной структуре и описанию (издательства)
+
+4  Задания
+4.1  Посчитайте, сколько книг вышло после 1 января 2000 года;
+books_count = ''' SELECT COUNT(book_id)
+            FROM books
+            WHERE publication_date > '01.01.2000'
+        '''
+get_sql_data(books_count)
+
+  После 1 января 2000 года вышло 819 книг
+
+4.2  Для каждой книги посчитайте количество обзоров и среднюю оценку;
+rev_count = """
+SELECT 
+    b.title, 
+    COUNT(DISTINCT rv.review_id) AS reviews_count, 
+    AVG(r.rating) AS average_rating
+​
+​
+FROM 
+    books b
+    LEFT JOIN ratings r ON b.book_id = r.book_id
+    LEFT JOIN reviews rv ON b.book_id = rv.book_id
+​
+​
+GROUP BY 
+    b.book_id;
+"""
+get_sql_data(rev_count)
+
+  всего 1000 книг , с названиями , кол-вом обзоров и средним рейтингом ,что позволит изучить эти показатели при необходимости
+
+4.3  Определите издательство, которое выпустило наибольшее число книг толще 50 страниц — так вы исключите из анализа брошюры;
+
+books_50 = ''' 
+SELECT 
+    top.publisher_id,
+    top.publisher,
+    top.number_books
+​FROM 
+    (SELECT 
+         b.publisher_id AS publisher_id,
+         COUNT(b.book_id) AS number_books,
+         p.publisher AS publisher     
+     FROM 
+         books AS b
+         LEFT JOIN publishers AS p ON b.publisher_id = p.publisher_id
+         
+     WHERE 
+         num_pages > 50     
+     GROUP BY 
+         b.publisher_id,
+         p.publisher     
+     ORDER BY    
+             number_books DESC) AS top
+LIMIT 5
+; '''
+get_sql_data(books_50)
+
+  Penguin Books выпустил 42 книги толще чем 50 страниц , это самое большое число среди всех издателей
+
+4.4  Определите автора с самой высокой средней оценкой книг — учитывайте только книги с 50 и более оценками;
+author_top_rating = '''
+SELECT author_ratings.author,
+       AVG(author_ratings.avg_rating) AS total_rating
+FROM
+    (SELECT a.author AS author,
+            AVG(ra.rating) AS avg_rating
+     FROM books AS b
+     
+     LEFT JOIN authors AS a ON b.author_id = a.author_id
+     LEFT JOIN ratings AS ra ON b.book_id = ra.book_id
+     
+     GROUP BY b.book_id,
+              a.author_id
+     
+     HAVING COUNT(ra.rating_id) >= 50
+     ) AS author_ratings
+​
+GROUP BY author_ratings.author
+​
+ORDER BY total_rating DESC
+​
+LIMIT 5
+; '''
+get_sql_data(author_top_rating)
+
+  J.K.Rowling/Mary GrandPre самый высокоцененный автор , она написала сагу Гарри Поттер
+
+4.5  Посчитайте среднее количество обзоров от пользователей, которые поставили больше 48 оценок.
+rating_48 = '''
+SELECT AVG(users.total_reviews)
+​
+FROM
+(SELECT username,
+        COUNT(review_id) AS total_reviews 
+ 
+ FROM reviews
+ 
+ WHERE username IN (
+                    SELECT username
+                    FROM ratings
+                    GROUP BY username
+                    HAVING COUNT(rating_id) > 48
+                    )
+ 
+ GROUP BY username
+ ) AS users
+​
+; '''
+get_sql_data(rating_48)
+
+  Среднее кол-во пользователей , которые поставили более 48 оценок - 24
+
+4.6  Посмтрим лидера по кол-ву обзоров среди всех книг
+немного дополнительной статистики
+rev_count = """
+SELECT 
+    b.title, 
+    COUNT(DISTINCT rv.review_id) AS reviews_count, 
+    AVG(r.rating) AS average_rating
+FROM 
+    books b
+    LEFT JOIN ratings r ON b.book_id = r.book_id
+    LEFT JOIN reviews rv ON b.book_id = rv.book_id
+​
+GROUP BY 
+    b.book_id
+​
+ORDER BY reviews_count DESC;
+"""
+get_sql_data(rev_count)
+
+  Лидер - Twilight : reviews - 7 , avg_rating - 3.6
+  далее идут книги с ревью равным 6 
+
+
+5  Выводы
+В ходе исследования были реализованы следующие шаги:
+
+-Посчитали что после 1 января 2000 года вышло 819 книг
+-Нашли кол-во обзоворов и средний рейтинг для каждой книги , Лидер - Twilight : reviews - 7 , avg_rating - 3.6
+-Выяснили, что Penguin Books выпустил 42 книги толще чем 50 страниц , это самое большое число среди всех издателей
+-Среднее кол-во обзоров от пользователей , которые поставили больше 48 оценок - 24
+
+
+Рекомендации:
+-Стоит ориентироваться на топовых авторов
+Эти авторы имеют наилучший рейтинг :
+    J.K.Rowling/Mary GrandPré 
+    Markus Zusak/Cao Xuân Việt Khương 
+    J.R.R. Tolkien
+ -Ориентироваться на рейтинг книг при рекламе
+ -Обзоры от пользователей очень важны , стоит уделять этому внимание и собирать фидбек
