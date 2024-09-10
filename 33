@@ -46,7 +46,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
-1 Загрузка данных
+1 Загрузка данных (загрузка необходимых данных , первичный осмотр)
 
 data_df = pd.read_csv('https://code.s3.yandex.net/datasets/mobile_dataset.csv')
 source_df = pd.read_csv('https://code.s3.yandex.net/datasets/mobile_sources.csv')
@@ -188,7 +188,8 @@ plt.xticks(rotation=20)
 
 plt.show()
 
-    на первом месте находится tips_show - увидел рекомендованные объявлений , почти 40000 , оно учитывается автоматически , не зависит от действий пользователя
+    на первом месте находится tips_show - увидел рекомендованные объявлений , почти 40000 , оно учитывается автоматически ,
+    не зависит от действий пользователя
     далее идуёт photos_show - просмотр фото в объявлении
     на 3 месте поиск по сайту
     4 место - advert_open - открыл карточки объявлений
@@ -253,11 +254,274 @@ plt.show()
 
 purpose_event = data.query('event_name == "contacts_show"').groupby('user_id')['event_name'].count().sort_values(ascending=False)
 
+  всего посмотрели 981 раз контакты
+
 purpose_event.describe()
 
-  всего посмотрели 981 раз контакты
   среднее значение 4.46
   стандартное отклонение 8.97 
   минимальное 1
   максимальное 136
+    
+    максимальное значение 136 это слишком много , стоит посмотреть выбросы с помощью boxplot
 
+ax = purpose_event.plot.box(figsize=(15, 10))
+
+plt.title('распределение кол-ва просмотра ')
+
+ax.set_ylabel('кол-во просмотров')
+ax.set(xticklabels=[])
+plt.ylim(0,137);
+plt.show()
+
+ax = purpose_event.plot.box(figsize=(15, 10))
+
+plt.title('распределение кол-ва просмотра')
+
+ax.set_ylabel('кол-во просмотров')
+ax.set(xticklabels=[])
+plt.ylim(0,15);
+plt.show()
+
+    136 это единичный случай , скорей всего это ошибка в данных , ну либо человек очень любит покупки
+    если ориентироваться на среднее значение 4 , то выбросов много , но они скорей всего абсолютно реальны , люди вполне 
+    могут покупать более 4 раз 
+    
+    более 15 и до примерно 80-60 скорей всего находяться люди , которые занимаются покупками не только для себя , 
+    но и для своих товарищей , либо пытаются заработать
+    
+    на втором графике видно , что значения больше 8 уже являются аномалиями , верхнее значение находиться в 8 , 
+    медиана в 2 
+
+3.5  Составим сценарии действий пользователей
+
+data = data.sort_values(['user_id', 'event_time'])
+data
+
+    найдём среднее время сессии
+
+    в аналитике https://docs.tracker.my.com/tracking/attribution/attribution_settings
+    среднее время таймаута составляет 30 минут , будем использовать его
+
+g = (data.groupby('user_id')['event_time'].diff() > pd.Timedelta('30Min')).cumsum()
+
+data['session_id'] = data.groupby(['user_id', g], sort=False).ngroup() + 1
+
+data = data.sort_values(['user_id','event_time'])
+data
+    далее избавимся от tips_show , понятие "увидел рекомендованое объявление" не контролируемо и мы не включаем его 
+    в сценарий действий пользователя
+
+scen_data = data.query('event_name != "tips_show"')
+scen_data['event_name'].unique()
+scen_data.head(5)
+
+scen_data_clean = scen_data.groupby('session_id')['event_name'].unique().to_frame()
+scen_data_clean = scen_data.groupby('session_id')['event_name'].unique().to_frame()
+scen_data_clean
+
+
+scen_data_clean = scen_data.groupby('session_id')['event_name'].unique().to_frame()
+scen_data_clean
+sc_start = scen_data_clean
+sc_start
+
+sc_start['event_name']
+
+
+
+scen_data_clean.event_name = scen_data_clean.event_name.apply(lambda x: tuple(x) if type(x)!= str else tuple([x]))
+scen_data_clean.head(10)
+
+a1 = scen_data_clean['event_name'].value_counts()
+a1 = a1.to_frame()
+a1 = a1.reset_index()
+a1
+
+a1 = a1.drop(index=[0,1,2,3,4,5,6,7,8])
+a1.head(15)
+
+    Мы видим , что сценарии 9 , 13 , 21 приводят нас к целевому событию , постороим воронку для них.
+    возьмём те у которых ЦС стоит на 1 месте
+
+Соответственно нужно построить 3 воронки:
+
+    1.map => contact_show
+    2.search => conctact_show
+    3.search => photos_show => contacts_show
+
+funnel_data1 = data.loc[data['event_name'].isin(['map', 'contacts_show'])]
+ab1 = funnel_data1[funnel_data1['event_name'] == 'map']
+ab1 = ab1['user_id'].drop_duplicates()
+ab1
+
+#проверка значений
+display(ab1.count())
+display(data1.query('event_name == "map"')['user_id'].nunique())
+
+map_vor_1 = ab1.count()
+ac1 = funnel_data1[(funnel_data1['event_name'] == 'contacts_show') & (funnel_data1['user_id'].isin(ab1))]
+ac1 = ac1['user_id'].drop_duplicates()
+contacts_vor_1 = ac1.count()
+
+fig = go.Figure(go.Funnel(
+    y = ["просмотр карты", "просмотр контактов"],
+    x = [map_vor_1,
+        contacts_vor_1]))
+fig.update_layout(title_text='Воронка просмотр карты => Просмотр контактов')
+fig.show()
+    
+    просматривали карту 1456 человек , из них 289 перешли в контакты
+
+3.5.2  воронка search => contacts_show
+
+funnel_data2 = data.loc[data['event_name'].isin(['search', 'contacts_show'])]
+ab2 = funnel_data2[funnel_data2['event_name'] == 'search']
+ab2 = ab2['user_id'].drop_duplicates()
+ab2
+
+display(ab2.count())
+display(data1.query('event_name == "search"')['user_id'].nunique())
+search_vor_1 = ab2.count()
+ac2 = funnel_data2[(funnel_data2['event_name'] == 'contacts_show') & (funnel_data2['user_id'].isin(ab2))]
+ac2 = ac2['user_id'].drop_duplicates()
+contacts_vor_2 = ac2.count()
+​
+fig = go.Figure(go.Funnel(   
+    y = ["поиск", "просмотр контактов"],
+    x = [search_vor_1,
+        contacts_vor_2]))
+fig.update_layout(title_text='Воронка Поиск => Просмотр контактов')
+fig.show()
+
+    поиском пользовались 1666 человек , контакты из них посмотрели 377
+
+3.5.3  воронка searach => photos_show => contacts_show
+
+funnel_data3 = data.loc[data['event_name'].isin(['search', 'photos_show', 'contacts_show'])]
+ab3 = funnel_data3[funnel_data3['event_name'] == 'search']
+ab3 = ab3['user_id'].drop_duplicates()
+ab3
+
+display(ab3.count())
+display(data1.query('event_name == "search"')['user_id'].nunique())
+
+search_vor_3 = ab3.count()
+ac3 = funnel_data3[(funnel_data3['event_name'] == 'photos_show') & (funnel_data3['user_id'].isin(ab3))]
+ac3 = ac3['user_id'].drop_duplicates()
+ac3
+photos_vor_3 = ac3.count()
+​
+ad3 = funnel_data3[(funnel_data3['event_name'] == 'contacts_show') & (funnel_data3['user_id'].isin(ac3))]
+ad3 = ad3['user_id'].drop_duplicates()
+ad3
+contacts_vor_3 = ad3.count()
+fig = go.Figure(go.Funnel(
+     y = ["поиск", "просмотр фото", "просмотр контактов"],
+    x = [search_vor_3,
+        photos_vor_3,
+        contacts_vor_3]))
+fig.update_layout(title_text='Воронка Поиск => Просмотр фото => просмотр контактов')
+fig.show()
+
+    поиском пользовались 1666 человек , фото из них посмотрели 647 , а контакты далее посмотрели 192 человека
+    в случае с просмотром фото только 12% перешли в ЦС
+    В общем показатели близкие , но не очень большие , стоит поработать над ними
+
+3.6  Метрика DAU
+
+DAU - количество уникальных пользователей за сутки (Daily Active Users) 
+dau_all = data.groupby('event_date')['user_id'].nunique()
+display(dau_all.describe())
+dau_all.head(5)
+dau_all.plot(kind='hist', bins=5,figsize=(15,10))
+​
+plt.xlabel('кол-во')
+plt.ylabel('частота')
+​
+​
+plt.title('Активные пользователи в день', fontsize=15)
+plt.show()
+    частота активных пользователей примерно одинакова 
+    среднее значение -280 
+    стандартное отклонение небольшое - 46.737
+    минимальное значение 178
+    максимальное 352 
+    медиана отличается от среднего значения всего на 13 пунктов , что не много
+
+3.7  Относительная частота событий
+
+#создадим 2 группы: 1- совершивших ЦС , 2 - не совершавших ЦС
+
+contact_group = data1.query('event_name == "contacts_show"')['user_id'].unique()
+non_contact_group = data1.query('user_id != "contact_group"')['user_id'].unique()
+
+# копия основного датафрейма
+data2.info()
+group_1 = data2.query('user_id not in @contact_group')['event_name']
+group_2 = data2.query('user_id in @contact_group')['event_name']
+frame_1 = group_1.value_counts().to_frame()
+frame_2 = group_2.value_counts().to_frame()
+frame_1 = frame_1.reset_index()
+frame_1
+frame_2 = frame_2.reset_index()
+frame_2
+
+#удалим строчку с contacts_show
+frame_2 = frame_2.drop(1)
+frame_1_sum = frame_1['event_name'].sum()
+frame_2_sum = frame_2['event_name'].sum()
+    TE = Target Event(Целевое Событие)
+
+frame_1['TE_ratio%'] = frame_1.apply(lambda row: round((row.event_name / frame_1_sum)*100,2), axis=1)
+frame_1 = frame_1.rename(columns={"event_name":"TE_events"})
+
+frame_1
+frame_1['TE_ratio%'] = frame_1.apply(lambda row: round((row.event_name / frame_1_sum)*100,2), axis=1)
+frame_1 = frame_1.rename(columns={"event_name":"TE_events"})
+​
+frame_1
+frame_2['non_TE_ratio%'] = frame_2.apply(lambda row: round((row.event_name / frame_2_sum)*100,2), axis=1)
+frame_2 = frame_2.rename(columns={"event_name":"non_TE_events"})
+​
+frame_2
+both_frames = frame_2.merge(frame_1, on=['index'], how='left')
+both_frames
+both_frames = both_frames.fillna(0)
+both_frames
+
+    показ рекламы ожидаемо находиться на 1 месте в обоих группах (57.24% , 58.52%) и составляет более половины событий
+    показ фото больше у пользователей без ЦС (15.69% против 12.63%)
+    поиск у пользователей с ЦС немного больше (10.08% против 9.38%)
+    открытие карточек у пользоватейлей с ЦС больше ( 9.81% против 7.14%) 
+    звонки есть только у пользователей без ЦС - их доля от общего всего 2.41
+    люди с ЦС чаще добавляют в избранное (2.13% против 1.90%)
+    клики по рекламным объявлениям самые низкие в обеих группах(1.50% пользователи без ЦС и 1.03% у пользователей с ЦС) 
+
+4  Проверка гипотез
+
+4.1  гипотеза 1
+
+Проверим гипотезу
+
+Одни пользователи совершают действия tips_show и tips_click , другие —
+только tips_show . Проверьте гипотезу: конверсия в просмотры контактов
+различается у этих двух групп.
+H0: конверсия у двух групп не отличается (группы:
+
+                                                1.tips_show + tips_click
+                                                2.tips_show)
+H1: конверсии у двух групп отличаются
+
+    выделим две категории: 1.tips_show
+                           2.tips_show+click
+
+tips_show = data.query('event_name =="tips_show"')['user_id'].unique().tolist()
+print('tips_show count', len(tips_show))
+​
+tips_show_click = data.query('event_name =="tips_click" and user_id==@tips_show')['user_id'].unique().tolist()
+print('tips_show+tips_click count', len(tips_show_click))
+​
+only_tips = list(set(tips_show) - set(tips_show_click))
+print('only_tips ', len(only_tips))
+data['event_name'].unique()
