@@ -1,1 +1,263 @@
-print('sdfsdf')
+Проект по теме "Анализ поведения пользователей магазина << Ненужные вещи>>"
+
+Описание проекта:
+
+    Наши пользователи совершают много действий в приложении, и мы уверены, что в этих
+    данных есть инсайты, которые позволят нам стать лучшим приложением для продажи 
+    ненужных вещей.
+    «Ненужные вещи» — ваши ненужные вещи нужны кому-то другому!
+Задача:
+
+  1 Проанализируйте связь целевого события — просмотра контактов — и других
+  действий пользователей.
+
+  2 Оцените, какие действия чаще совершают те пользователи, которые
+  просматривают контакты.
+  Проведите исследовательский анализ данных
+  Проанализируйте влияние событий на совершение целевого события
+  Этапы:
+
+
+  Проведите исследовательский анализ данных
+
+  Проанализируйте влияние событий на совершение целевого события
+
+  Проверить гипотезы:
+    1 Одни пользователи совершают действия tips_show и tips_click , другие —
+    только tips_show . Проверьте гипотезу: конверсия в просмотры контактов
+    различается у этих двух групп.
+
+    2 Сформулируйте собственную статистическую гипотезу. Дополните её
+    нулевой и альтернативной гипотезами. Проверьте гипотезу с помощью
+    статистического теста.
+
+
+
+import pandas as pd
+import seaborn as sns
+from matplotlib import pyplot as plt
+import numpy as np
+import math as mth
+import scipy.stats as stats
+from scipy import stats as st
+import plotly.express as px
+from plotly import graph_objects as go
+import warnings
+warnings.filterwarnings('ignore')
+
+
+1 Загрузка данных
+
+data_df = pd.read_csv('https://code.s3.yandex.net/datasets/mobile_dataset.csv')
+source_df = pd.read_csv('https://code.s3.yandex.net/datasets/mobile_sources.csv')
+​
+display(data_df.head(5))
+display(source_df.head(5))
+
+display(data_df.info())
+display(source_df.info())
+
+      Два датафрейма:
+      первый состоит из 3 колонок , 74197 строк. 
+      второй из 2 колонок , 4293 строк.
+      Видим что в большинстве типы данных приемлимые(object) , кроме колонки event.time , нужно  поменять на datetime, 
+      так же стоит убрать милисекунды.
+      Нужно заменить в названиях точки (event.time) на нижние пробелы (event_time) для всех столбцов data_df.
+      В source_df поменять название колонки userId на user_id.
+
+
+2  Предобработка данных
+  Поменяем тип данных и названия
+
+  уберём милисекунды из event.time
+
+data_df['event.time'] = pd.to_datetime(data_df['event.time'])
+data_df['event.time'] = data_df['event.time'].dt.floor('s')
+data_df.info()
+
+data_df = data_df.rename(columns={"event.name" : "event_name", "event.time" : "event_time" , "user.id" : "user_id"})
+source_df = source_df.rename(columns={"userId" : "user_id"})
+display(data_df.head(5))
+display(source_df.head(5))
+
+  Все что нужно поменяли , теперь перейдём к дубликатам и пропускам
+
+print('Количество дубликатов в таблице data_df:', data_df.duplicated().sum())
+
+  Удалим дубликаты , их не очень много , почти не повлияет на общую выборку
+
+data_df = data_df.drop_duplicates().reset_index(drop=True)
+
+print(data_df.isna().sum())
+print(source_df.isna().sum())
+  
+  пропусков не наблюдается
+  ещё стоит посмотреть уникальные значения колонок с названиями действий пользователей и источника установки приложения
+
+print(data_df['event_name'].unique())
+print(source_df['source'].unique())
+
+print('Количество дубликатов в общей таблице data:', data.duplicated().sum())
+print('Количество пропущенных значений в общей таблице data:', data.isnull().sum())
+
+  Предобработали данные и создали один общий датафрейм data для работы с ним
+  добавим туда колонки с часом , неделей , месяцем , годом и просто датой без времени
+
+data.head(5)
+
+  Создадим резервные датафреймы
+
+data1=data
+data2=data
+data3=data
+
+display(data.query('event_name == "map"')['user_id'].nunique())
+display(data2.query('event_name == "map"')['user_id'].nunique())
+display(data3.query('event_name == "map"')['user_id'].nunique())
+
+3  Исследовательский анализ данных
+  Рассмотрим данные и немного исследуем их
+
+3.1  Посчитаем долю из каждого источника установки
+global_sc = data.groupby('source').agg({'user_id' : 'nunique'})
+
+global_sc = global_sc.reset_index()
+global_sc
+
+global_sc['proportion'] = global_sc['user_id'] / len(data['user_id'].unique()) *100
+global_sc
+
+global_sc = global_sc.round(1)
+global_sc
+
+plt.figure(figsize=(10,5))
+ax=sns.barplot(x=global_sc['source'],y=global_sc['proportion'], data = global_sc, color='steelblue')
+​
+#добавим числа для понимания
+for p in ax.patches:
+    ax.annotate(format(p.get_height(), '.1f'),
+                   (p.get_x() + p.get_width() / 2., p.get_height()),
+                   ha = 'center', va = 'center',
+                   xytext = (0, 9),
+                   textcoords = 'offset points')
+​
+​
+ax.set_xlabel('Источник установки приложения')
+ax.set_ylabel('Процент пользователей')
+plt.title('Источники установки приложения')
+​
+plt.show()
+    
+    yandex на 1 месте среди всех источников скачивания приложений (1934 - 45.1%)
+    other(другие) занимает второе место (1230 - 28.7%)
+    далее идёт google (1129 - 26.3%)
+
+3.2  посмотрим частоту действий пользователей
+    
+    для начала нужно привести в порядок колонку event_name
+    нужно совместить contacts_show и show_contacts. Так же поступим с всеми поисковыми search_N(1-7)
+
+
+def event_combination(i):
+    
+    if i == 'show_contacts':
+        
+        new_name = 'contacts_show'
+        return new_name
+    
+    elif 'search' in i:
+        
+        new_name = 'search'
+        return new_name
+    
+    return i
+data['event_name'] = data['event_name'].apply(event_combination)
+freq_events = data['event_name'].value_counts().to_frame()
+freq_events
+
+data['event_name'] = data['event_name'].apply(event_combination)
+freq_events = data['event_name'].value_counts().to_frame()
+freq_events
+
+freq_events.plot(kind='bar', figsize=(10,5))
+
+plt.title('Частота совершения действий', fontsize=15)
+
+plt.gca().set(xlabel='типы событий', ylabel='количество событий')
+plt.xticks(rotation=20)
+
+plt.show()
+
+    на первом месте находится tips_show - увидел рекомендованные объявлений , почти 40000 , оно учитывается автоматически , не зависит от действий пользователя
+    далее идуёт photos_show - просмотр фото в объявлении
+    на 3 месте поиск по сайту
+    4 место - advert_open - открыл карточки объявлений
+    5 - map - открытие карты объявлений
+    favorites_add , tips_click , contacts_call занимают 3 последних места - избранное , клик по рекомендации и звонок
+    tips_show - сильно больше любых других действий, вызвано это тем что люди постоянно смотрят рекомендованные объявления в приложении с продажей для покупки
+
+3.3  Retention rate
+  посмотрим метрики удволетворённости
+
+  разобьём пользователей по когортам
+  найдём период выборки
+  возьмём дату, когда пользователь впервые что-то сделал
+first_date = data.groupby(['user_id'])['event_date'].min()
+first_date.name = 'start_data'
+data = data.join(first_date,on='user_id')
+data.head(5)
+
+  найдём когорту
+
+data['active_week'] = pd.to_datetime(data['event_date'],
+                                    unit='d') - pd.to_timedelta(data['event_date'].dt.dayofweek, unit='d')
+​
+​
+data['start_week'] = pd.to_datetime(data['start_data'],
+                                    unit='d') - pd.to_timedelta(data['start_data'].dt.dayofweek, unit='d')
+  найдём лайфтайм
+
+data['cohort_lifetime'] = data['active_week'] - data['start_week']
+data['cohort_lifetime'] = data['cohort_lifetime'] / np.timedelta64(1,'W')
+data['cohort_lifetime'] = data['cohort_lifetime'].astype(int)
+cohorts = data.groupby(['start_week','cohort_lifetime']).agg({'user_id':'nunique'}).reset_index()
+ 
+  найдём число пользователей на начальную неделю
+
+users_count_start = cohorts[cohorts['cohort_lifetime'] == 0][['start_week','user_id']]
+​
+users_count_start = users_count_start.rename(columns={'user_id':'cohort_users'})
+cohorts = cohorts.merge(users_count_start,on='start_week')
+
+  найдём retention rate
+
+cohorts['retention'] = cohorts['user_id']/cohorts['cohort_users']
+​
+cohorts['start_week'] = cohorts['start_week'].dt.date
+​
+retention_rate = cohorts.pivot_table(index='start_week',columns='cohort_lifetime',values='retention',aggfunc='sum')
+fig = plt.figure(figsize = (10, 5)) 
+sns.heatmap(retention_rate, annot = True,fmt = '.2%') 
+           
+plt.title('коэффицент удержания')  
+plt.xlabel('лайфтайм, дни')
+plt.ylabel('дата')
+plt.show()
+
+    retention rate в первую неделю убывает
+    для когорты 07-14 составляет 24.1% , а для пользователей когорты 21-28 всего 21.8% , что явно лучше 
+    чем больше людей проводят времени в приложении , тем меньше их остаётся 
+
+3.4  Просмотр контактов
+  Просмотр контактов - целевое событие нашего исследования , необходимо изучить его
+
+purpose_event = data.query('event_name == "contacts_show"').groupby('user_id')['event_name'].count().sort_values(ascending=False)
+
+purpose_event.describe()
+
+  всего посмотрели 981 раз контакты
+  среднее значение 4.46
+  стандартное отклонение 8.97 
+  минимальное 1
+  максимальное 136
+
